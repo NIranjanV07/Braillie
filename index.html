@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Braille System</title>
+
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui; }
+
+body {
+  height: 100vh;
+  background: linear-gradient(135deg, #0a0f1f, #020412);
+  color: #e5e7eb;
+  overflow: hidden;
+}
+
+/* Stars */
+body::before {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-image:
+    radial-gradient(2px 2px at 20px 30px, white, transparent),
+    radial-gradient(2px 2px at 80px 120px, white, transparent);
+  background-repeat: repeat;
+  background-size: 300px 300px;
+  animation: moveStars 60s linear infinite;
+}
+
+@keyframes moveStars {
+  from { transform: translateY(0); }
+  to { transform: translateY(-200px); }
+}
+
+/* Center */
+.center {
+  position: absolute;
+  top: 45%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+/* Chat */
+.chat {
+  position: absolute;
+  top: 10px;
+  width: 100%;
+  padding: 20px;
+  height: 70%;
+  overflow-y: auto;
+}
+
+.msg {
+  background: rgba(255,255,255,0.08);
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  max-width: 60%;
+  position: relative;
+}
+
+/* 🔊 Hover speaker */
+.speaker {
+  display: none;
+  position: absolute;
+  right: -30px;
+  top: 10px;
+  cursor: pointer;
+}
+.msg:hover .speaker { display: inline; }
+
+/* Input */
+.input-container {
+  position: absolute;
+  bottom: 20px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.input-box {
+  width: 65%;
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,0.08);
+  border-radius: 30px;
+  padding: 10px 14px;
+}
+
+.input-box input[type="text"] {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #fff;
+}
+
+.plus {
+  font-size: 20px;
+  margin-right: 10px;
+  cursor: pointer;
+  color: #60a5fa;
+}
+
+.send {
+  margin-left: 10px;
+  background: #2563eb;
+  padding: 8px 14px;
+  border-radius: 50%;
+  border: none;
+  color: white;
+}
+
+#file { display: none; }
+
+/* Camera */
+#cameraBox {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  width: 340px;
+  height: 260px;
+  display: none;
+  border: 2px solid #2563eb;
+  border-radius: 10px;
+  background: black;
+}
+
+#cameraBox iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.cam-controls {
+  position: absolute;
+  bottom: 5px;
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+}
+
+.cam-btn {
+  background: #2563eb;
+  border: none;
+  padding: 5px 10px;
+  color: white;
+  cursor: pointer;
+  border-radius: 5px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="center" id="center">
+  <h1>Welcome to Braille System</h1>
+</div>
+
+<div class="chat" id="chat"></div>
+
+<!-- CAMERA -->
+<div id="cameraBox">
+  <iframe id="camFrame"></iframe>
+
+  <div class="cam-controls">
+    <button class="cam-btn" onclick="captureImage()">📸 Capture</button>
+    <button class="cam-btn" onclick="closeCamera()">❌ Close</button>
+  </div>
+</div>
+
+<div class="input-container">
+  <div class="input-box">
+
+    <span class="plus" onclick="openFile()">➕</span>
+    <span class="plus" onclick="startVoice()">🎤</span>
+    <span class="plus" onclick="openCamera()">📷</span>
+
+    <input type="file" id="file">
+    <input type="text" id="text" placeholder="Type a message...">
+
+    <button class="send" onclick="send()">➤</button>
+
+  </div>
+</div>
+
+<script>
+
+// ADD MESSAGE
+function addMessage(text) {
+  let chat = document.getElementById('chat');
+
+  let div = document.createElement('div');
+  div.className = "msg";
+  div.innerText = text;
+
+  let speaker = document.createElement('span');
+  speaker.className = "speaker";
+  speaker.innerText = "🔊";
+
+  speaker.onclick = () => {
+    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  };
+
+  div.appendChild(speaker);
+  chat.appendChild(div);
+}
+
+// SEND TEXT
+function send() {
+  let text = document.getElementById('text').value.trim();
+  if (!text) return;
+
+  document.getElementById('center').style.display = "none";
+  addMessage(text);
+
+  fetch('/send', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'data=' + encodeURIComponent(text)
+  });
+
+  document.getElementById('text').value = "";
+}
+
+// ENTER KEY
+document.getElementById('text').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    send();
+  }
+});
+
+// FILE OCR
+function openFile() {
+  document.getElementById('file').click();
+}
+
+document.getElementById('file').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  fetch('/upload', { method: 'POST', body: formData })
+  .then(res => res.json())
+  .then(data => addMessage(data.text));
+});
+
+// VOICE
+function startVoice() {
+  const rec = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  rec.onresult = e => {
+    document.getElementById('text').value = e.results[0][0].transcript;
+  };
+  rec.start();
+}
+
+// CAMERA OPEN
+function openCamera() {
+  let ip = prompt("Enter ESP32 IP");
+  if (!ip) return;
+
+  if (!ip.startsWith("http")) ip = "http://" + ip;
+
+  document.getElementById("camFrame").src = ip + "/";
+  document.getElementById("cameraBox").style.display = "block";
+}
+
+// CAMERA CLOSE
+function closeCamera() {
+  document.getElementById("camFrame").src = "";
+  document.getElementById("cameraBox").style.display = "none";
+}
+
+// 🔥 FIXED CAPTURE
+function captureImage() {
+
+  const frame = document.getElementById("camFrame");
+  let url = frame.src;
+
+  if (!url) {
+    alert("Camera not open");
+    return;
+  }
+
+  // STOP STREAM
+  frame.src = "";
+
+  setTimeout(() => {
+
+    fetch(url.replace('/', '/capture'))
+    .then(res => res.blob())
+    .then(blob => {
+
+      const formData = new FormData();
+      formData.append('file', blob, 'capture.jpg');
+
+      return fetch('/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+    })
+    .then(res => res.json())
+    .then(data => {
+      addMessage(data.text);
+    })
+    .catch(() => alert("Capture failed"));
+
+  }, 600);
+}
+
+</script>
+
+</body>
+</html>
